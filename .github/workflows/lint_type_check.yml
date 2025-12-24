@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+# Prevent multiple redundant builds for the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      # CRITICAL: You must checkout your code first
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Setup uv
+      - name: Install uv and Setup Python
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+          enable-cache: false 
+
+      - name: Lint and Type Check
+        run: |
+          uv tool run ruff check .
+          uv tool run ruff format --check .
+          uv tool run basedpyright .
