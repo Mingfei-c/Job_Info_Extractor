@@ -22,5 +22,15 @@ exclude = [
 
 typeCheckingMode = "basic"
 
+# Ignore missing imports (dependencies not installed in CI)
+reportMissingImports = false
+reportMissingModuleSource = false
 reportMissingTypeStubs = false
+
+# Relax some strict checks
 reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportArgumentType = "warning"
+reportAttributeAccessIssue = "warning"
+

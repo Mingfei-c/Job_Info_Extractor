@@ -234,7 +234,7 @@ class AdzunaAPI:
         self.country = country
 
     def search_jobs(
-        self, page: int = 1, what: str = "", where: str = "", max_days_old: int = None
+        self, page: int = 1, what: str = "", where: str = "", max_days_old: int | None = None
     ) -> dict:
         """
         搜索职位
@@ -514,7 +514,7 @@ class JobFetchService:
         """获取当前配额状态"""
         return self.rate_limiter.get_remaining_quota()
 
-    def get_jobs(self, category: str = None, limit: int = 50) -> list[Job]:
+    def get_jobs(self, category: str | None = None, limit: int = 50) -> list[Job]:
         """获取数据库中的职位"""
         query = self.db.query(Job).filter(Job.is_active.is_(True))
 
