@@ -127,7 +127,7 @@ Notes:
             )
 
             raw_response = response.text
-            logger.debug(f"LLM response: {raw_response[:200]}...")
+            logger.debug(f"LLM response: {(raw_response or '')[:200]}...")
 
             # Parse JSON response
             result = self._parse_response(raw_response)

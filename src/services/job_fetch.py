@@ -74,7 +74,9 @@ class Job(Base):
     created_date = Column(DateTime)  # Publication date on Adzuna
     fetched_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     is_active = Column(Boolean, default=True)
-    is_scraped = Column(Boolean, default=False, index=True)  # Whether full description has been scraped
+    is_scraped = Column(
+        Boolean, default=False, index=True
+    )  # Whether full description has been scraped
 
 
 class ApiCallLog(Base):
@@ -565,7 +567,9 @@ class JobFetchService:
                 )
 
             next_fetch = datetime.now(timezone.utc).strftime("%H:%M:%S")
-            logger.info(f"Next fetch in {interval_seconds}s (at ~{next_fetch} UTC + {interval_seconds}s)")
+            logger.info(
+                f"Next fetch in {interval_seconds}s (at ~{next_fetch} UTC + {interval_seconds}s)"
+            )
 
             try:
                 time.sleep(interval_seconds)

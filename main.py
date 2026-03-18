@@ -156,15 +156,15 @@ def main():
             if args.once:
                 # Fetch one page and exit — designed for cron
                 print("Fetching one page...")
-                result = service.fetch_all_available(
-                    what=args.what, where=args.where, max_pages=1
-                )
+                result = service.fetch_all_available(what=args.what, where=args.where, max_pages=1)
                 print(f"Done: {result['jobs_fetched']} jobs, {result['jobs_new']} new")
             else:
                 # Continuous loop
                 print("=" * 60)
                 print("Continuous Job Fetch")
-                print(f"Interval: {args.interval}s | Keywords: '{args.what}' | Location: '{args.where}'")
+                print(
+                    f"Interval: {args.interval}s | Keywords: '{args.what}' | Location: '{args.where}'"
+                )
                 print("=" * 60)
                 service.run_continuous(
                     what=args.what,

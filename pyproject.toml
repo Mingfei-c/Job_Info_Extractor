@@ -5,7 +5,10 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B"]
 
-ignore = ["E501"] # Line too long (already handled by formatter)
+ignore = [
+    "E501",  # Line too long (already handled by formatter)
+    "B008",  # Function call in default argument (standard FastAPI pattern: File(...), Depends(...))
+]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -33,4 +36,9 @@ reportUnknownArgumentType = false
 reportUnknownVariableType = false
 reportArgumentType = "warning"
 reportAttributeAccessIssue = "warning"
+# SQLAlchemy ORM columns are correctly used as plain values at runtime;
+# basedpyright incorrectly types them as Column[T] in boolean checks.
+reportGeneralTypeIssues = "warning"
+# langchain-google-genai type stubs are incomplete (e.g. google_api_key param)
+reportCallIssue = "warning"
 

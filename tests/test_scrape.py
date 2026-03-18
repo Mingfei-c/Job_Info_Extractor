@@ -35,7 +35,7 @@ def get_full_description(url: str) -> dict:
     # Method 1: find divs with "description" in class name
     desc_divs = soup.find_all("div", class_=True)
     for div in desc_divs:
-        classes = " ".join(div.get("class", []))
+        classes = " ".join(div.get("class") or [])
         if "description" in classes.lower():
             text = div.get_text(separator="\n", strip=True)
             if len(text) > len(description):

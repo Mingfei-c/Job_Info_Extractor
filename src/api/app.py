@@ -68,7 +68,7 @@ async def analyze_resume(file: UploadFile = File(...), top_k: int = 5):
         top_k: Number of top matching jobs to return (default 5)
     """
     # Validate file type
-    suffix = os.path.splitext(file.filename)[1].lower()
+    suffix = os.path.splitext(file.filename or "")[1].lower()
     if suffix not in (".pdf", ".docx"):
         raise HTTPException(status_code=400, detail="Only PDF and DOCX files are supported")
 

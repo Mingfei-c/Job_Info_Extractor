@@ -55,7 +55,9 @@ class FullDescription(Base):
     __tablename__ = "full_descriptions"
 
     id = Column(Integer, primary_key=True, index=True)
-    job_id = Column(Integer, unique=True, index=True)  # References adzuna_jobs.id (maintained at application layer)
+    job_id = Column(
+        Integer, unique=True, index=True
+    )  # References adzuna_jobs.id (maintained at application layer)
     full_description = Column(Text)
     source_url = Column(String(1000))
     scraped_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -273,7 +275,7 @@ class DescriptionExtractor:
 
         # Method 1: find divs with "description" in class name
         for div in soup.find_all("div", class_=True):
-            classes = " ".join(div.get("class", []))
+            classes = " ".join(div.get("class") or [])
             if "description" in classes.lower() or "job-content" in classes.lower():
                 text = div.get_text(separator="\n", strip=True)
                 if len(text) > len(description):
@@ -375,7 +377,9 @@ class DescriptionScrapeService:
 
             # Progress log
             if scraped % 10 == 0:
-                logger.info(f"Progress: {scraped}/{len(pending_jobs)}, success: {success}, failed: {failed}")
+                logger.info(
+                    f"Progress: {scraped}/{len(pending_jobs)}, success: {success}, failed: {failed}"
+                )
 
         result = {"status": "completed", "scraped": scraped, "success": success, "failed": failed}
 
