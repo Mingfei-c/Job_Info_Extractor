@@ -5,9 +5,12 @@ This is the main entry point for the application.
 Run this file from the project root to ensure all imports work correctly.
 
 Usage:
-    python main.py chat        # Start interactive chat
-    python main.py embed       # Run embedding service
-    python main.py test        # Run tests
+    python main.py chat          # Start interactive chat
+    python main.py embed         # Run embedding service
+    python main.py test          # Run tests
+    python main.py serve         # Start FastAPI server
+    python main.py fetch         # Continuous job fetch (every 1080s)
+    python main.py fetch --once  # Fetch one page and exit (for cron)
 """
 
 import argparse
@@ -20,11 +23,29 @@ def main():
     )
     parser.add_argument(
         "command",
-        choices=["chat", "embed", "test", "gap"],
-        help="Command to run: chat (interactive), embed (embedding service), test (run tests), gap (gap analyzer test)",
+        choices=["chat", "embed", "test", "gap", "fetch", "serve"],
+        help="Command to run: chat (interactive), embed (embedding service), test (run tests), gap (gap analyzer test), fetch (job fetch), serve (FastAPI server)",
     )
     parser.add_argument(
         "--query", "-q", type=str, help="Single query for chat (non-interactive mode)"
+    )
+    parser.add_argument(
+        "--what", type=str, default="", help="Job search keywords (for fetch command)"
+    )
+    parser.add_argument(
+        "--where", type=str, default="", help="Job search location (for fetch command)"
+    )
+    parser.add_argument(
+        "--interval", type=int, default=1080, help="Seconds between fetches (default: 1080)"
+    )
+    parser.add_argument(
+        "--once", action="store_true", help="Fetch one page and exit (for use with cron)"
+    )
+    parser.add_argument(
+        "--host", type=str, default="0.0.0.0", help="Host for serve command (default: 0.0.0.0)"
+    )
+    parser.add_argument(
+        "--port", type=int, default=8000, help="Port for serve command (default: 8000)"
     )
 
     args = parser.parse_args()
@@ -125,6 +146,55 @@ def main():
 
             traceback.print_exc()
             sys.exit(1)
+
+    elif args.command == "fetch":
+        from src.services.job_fetch import JobFetchService
+
+        try:
+            service = JobFetchService()
+
+            if args.once:
+                # Fetch one page and exit — designed for cron
+                print("Fetching one page...")
+                result = service.fetch_all_available(what=args.what, where=args.where, max_pages=1)
+                print(f"Done: {result['jobs_fetched']} jobs, {result['jobs_new']} new")
+            else:
+                # Continuous loop
+                print("=" * 60)
+                print("Continuous Job Fetch")
+                print(
+                    f"Interval: {args.interval}s | Keywords: '{args.what}' | Location: '{args.where}'"
+                )
+                print("=" * 60)
+                service.run_continuous(
+                    what=args.what,
+                    where=args.where,
+                    interval_seconds=args.interval,
+                )
+
+        except KeyboardInterrupt:
+            print("\nStopped.")
+        except Exception as e:
+            print(f"Error: {e}")
+            import traceback
+
+            traceback.print_exc()
+            sys.exit(1)
+
+    elif args.command == "serve":
+        import uvicorn
+
+        print("=" * 60)
+        print(f"Starting API server at http://{args.host}:{args.port}")
+        print(f"Docs: http://{args.host}:{args.port}/docs")
+        print("=" * 60)
+
+        uvicorn.run(
+            "src.api.app:app",
+            host=args.host,
+            port=args.port,
+            reload=False,
+        )
 
     elif args.command == "test":
         print("=" * 60)

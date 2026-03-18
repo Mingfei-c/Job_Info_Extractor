@@ -34,37 +34,39 @@ Base = declarative_base()
 
 
 class ScrapeRateLimits:
-    """爬虫速率限制配置（API单次返回20个职位，爬虫单次1页，所以限制×20）"""
+    """Scraper rate limiting configuration (API returns 20 jobs per call, scraper runs 1 per page, so limits x20)"""
 
-    # 滑动窗口限制
-    WINDOW_SECONDS = 70  # 70秒窗口
-    WINDOW_MAX_REQUESTS = 500  # 每窗口最多500次（25×20）
+    # Sliding window limit
+    WINDOW_SECONDS = 70  # 70-second window
+    WINDOW_MAX_REQUESTS = 500  # Max 500 requests per window (25 x 20)
 
-    # 自然时间段限制（留余量）
-    DAILY_MAX = 4800  # 每日最多（240×20）
-    WEEKLY_MAX = 19200  # 每周最多（960×20）
-    MONTHLY_MAX = 48000  # 每月最多（2400×20）
+    # Natural time period limits (with buffer)
+    DAILY_MAX = 4800  # Daily max (240 x 20)
+    WEEKLY_MAX = 19200  # Weekly max (960 x 20)
+    MONTHLY_MAX = 48000  # Monthly max (2400 x 20)
 
 
-# ==================== 数据库模型 ====================
+# ==================== Database Models ====================
 
 
 class FullDescription(Base):
-    """完整职位描述表"""
+    """Full job description table"""
 
     __tablename__ = "full_descriptions"
 
     id = Column(Integer, primary_key=True, index=True)
-    job_id = Column(Integer, unique=True, index=True)  # 关联 adzuna_jobs.id（应用层维护）
+    job_id = Column(
+        Integer, unique=True, index=True
+    )  # References adzuna_jobs.id (maintained at application layer)
     full_description = Column(Text)
     source_url = Column(String(1000))
     scraped_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    html_length = Column(Integer)  # 原始 HTML 长度
+    html_length = Column(Integer)  # Raw HTML length
     status = Column(String(50))  # success, failed, redirected
 
 
 class ScrapeLog(Base):
-    """爬虫日志表"""
+    """Scrape log table"""
 
     __tablename__ = "scrape_logs"
 
@@ -77,15 +79,15 @@ class ScrapeLog(Base):
     error_message = Column(Text)
 
 
-# 创建表
+# Create tables
 Base.metadata.create_all(bind=engine)
 
 
-# ==================== 爬虫速率限制器 ====================
+# ==================== Scrape Rate Limiter ====================
 
 
 class ScrapeRateLimiter:
-    """爬虫速率限制器（与 Adzuna API 限制一致）"""
+    """Scraper rate limiter (aligned with Adzuna API limits)"""
 
     def __init__(self, db_session):
         self.db = db_session
@@ -95,21 +97,21 @@ class ScrapeRateLimiter:
         return datetime.now(timezone.utc)
 
     def _get_day_start(self, dt: datetime) -> datetime:
-        """获取自然日开始时间（UTC）"""
+        """Get start of current day (UTC)"""
         return dt.replace(hour=0, minute=0, second=0, microsecond=0)
 
     def _get_week_start(self, dt: datetime) -> datetime:
-        """获取自然周开始时间（UTC，周一为起点）"""
+        """Get start of current week (UTC, Monday as start)"""
         day_start = self._get_day_start(dt)
         days_since_monday = dt.weekday()
         return day_start.replace(day=dt.day - days_since_monday)
 
     def _get_month_start(self, dt: datetime) -> datetime:
-        """获取自然月开始时间（UTC）"""
+        """Get start of current month (UTC)"""
         return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     def get_scrapes_in_period(self, start_time: datetime) -> int:
-        """获取某时间点之后的爬取次数"""
+        """Get number of successful scrapes after a given timestamp"""
         count = (
             self.db.query(ScrapeLog)
             .filter(ScrapeLog.scrape_time >= start_time, ScrapeLog.status == "success")
@@ -118,7 +120,7 @@ class ScrapeRateLimiter:
         return count
 
     def get_remaining_quota(self) -> dict:
-        """获取剩余配额"""
+        """Get remaining quota"""
         now = self._get_utc_now()
 
         daily_used = self.get_scrapes_in_period(self._get_day_start(now))
@@ -144,60 +146,60 @@ class ScrapeRateLimiter:
         }
 
     def can_scrape(self) -> tuple[bool, str]:
-        """检查是否可以发起请求"""
+        """Check whether a scrape request can be made"""
         now = time.time()
 
-        # 清理过期的滑动窗口记录
+        # Remove expired sliding window records
         window_start = now - ScrapeRateLimits.WINDOW_SECONDS
         while self.recent_calls and self.recent_calls[0] < window_start:
             self.recent_calls.popleft()
 
-        # 检查滑动窗口
+        # Check sliding window
         if len(self.recent_calls) >= ScrapeRateLimits.WINDOW_MAX_REQUESTS:
             wait_time = self.recent_calls[0] + ScrapeRateLimits.WINDOW_SECONDS - now
-            return False, f"滑动窗口限制：需等待 {wait_time:.1f} 秒"
+            return False, f"Sliding window limit: wait {wait_time:.1f} seconds"
 
-        # 检查日/周/月限制
+        # Check daily/weekly/monthly limits
         quota = self.get_remaining_quota()
 
         if quota["daily"]["remaining"] <= 0:
-            return False, "已达到每日限制 (240次)"
+            return False, "Daily limit reached (4800 requests)"
 
         if quota["weekly"]["remaining"] <= 0:
-            return False, "已达到每周限制 (960次)"
+            return False, "Weekly limit reached (19200 requests)"
 
         if quota["monthly"]["remaining"] <= 0:
-            return False, "已达到每月限制 (2400次)"
+            return False, "Monthly limit reached (48000 requests)"
 
         return True, "OK"
 
     def record_request(self):
-        """记录一次请求（滑动窗口）"""
+        """Record one request in the sliding window"""
         self.recent_calls.append(time.time())
 
     def wait_if_needed(self) -> bool:
-        """如果需要等待则等待，返回是否可以继续"""
+        """Wait if necessary, returns whether scraping can continue"""
         while True:
             can_request, reason = self.can_scrape()
 
             if can_request:
                 return True
 
-            # 日/周/月限制则停止
-            if "每日" in reason or "每周" in reason or "每月" in reason:
-                logger.warning(f"停止爬取：{reason}")
+            # Stop if daily/weekly/monthly limit reached
+            if "Daily limit" in reason or "Weekly limit" in reason or "Monthly limit" in reason:
+                logger.warning(f"Stopping scrape: {reason}")
                 return False
 
-            # 滑动窗口限制则等待
-            logger.debug(f"等待：{reason}")
+            # Wait for sliding window limit
+            logger.debug(f"Waiting: {reason}")
             time.sleep(5)
 
 
-# ==================== 描述提取器 ====================
+# ==================== Description Extractor ====================
 
 
 class DescriptionExtractor:
-    """从网页提取职位描述"""
+    """Extracts job descriptions from web pages"""
 
     HEADERS = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -205,7 +207,7 @@ class DescriptionExtractor:
         "Accept-Language": "en-US,en;q=0.5",
     }
 
-    # EEO 截断关键词
+    # EEO truncation keywords
     CUTOFF_KEYWORDS = [
         "eeo statement",
         "equal employment opportunity",
@@ -220,7 +222,7 @@ class DescriptionExtractor:
     @classmethod
     def extract(cls, url: str) -> dict:
         """
-        从 URL 提取职位描述
+        Extract job description from a URL
 
         Returns:
             {"description": str, "status": str, "html_length": int, "error": str}
@@ -242,10 +244,10 @@ class DescriptionExtractor:
             html_length = len(response.text)
             soup = BeautifulSoup(response.text, "html.parser")
 
-            # 提取描述
+            # Extract description
             description = cls._extract_description(soup)
 
-            # 清理 EEO 内容
+            # Remove EEO content
             description = cls._clean_description(description)
 
             return {
@@ -268,18 +270,18 @@ class DescriptionExtractor:
 
     @classmethod
     def _extract_description(cls, soup: BeautifulSoup) -> str:
-        """从 HTML 提取描述"""
+        """Extract description from HTML"""
         description = ""
 
-        # 方法1: 查找包含 "description" 的 class
+        # Method 1: find divs with "description" in class name
         for div in soup.find_all("div", class_=True):
-            classes = " ".join(div.get("class", []))
+            classes = " ".join(div.get("class") or [])
             if "description" in classes.lower() or "job-content" in classes.lower():
                 text = div.get_text(separator="\n", strip=True)
                 if len(text) > len(description):
                     description = text
 
-        # 方法2: 查找 article 或 main
+        # Method 2: find article or main elements
         if not description:
             for tag in ["article", "main", "section"]:
                 element = soup.find(tag)
@@ -293,7 +295,7 @@ class DescriptionExtractor:
 
     @classmethod
     def _clean_description(cls, text: str) -> str:
-        """清理描述，删除 EEO 内容"""
+        """Clean description by removing EEO content"""
         if not text:
             return text
 
@@ -311,11 +313,11 @@ class DescriptionExtractor:
         return text
 
 
-# ==================== 描述爬取服务 ====================
+# ==================== Description Scrape Service ====================
 
 
 class DescriptionScrapeService:
-    """描述爬取服务"""
+    """Description scraping service"""
 
     def __init__(self):
         self.db = SessionLocal()
@@ -326,18 +328,18 @@ class DescriptionScrapeService:
 
     def scrape_pending_jobs(self, max_jobs: int = 100) -> dict:
         """
-        爬取所有未爬取的职位描述
+        Scrape full descriptions for all unscraped jobs
 
         Args:
-            max_jobs: 本次最多爬取数量
+            max_jobs: Maximum number of jobs to scrape in this run
 
         Returns:
-            爬取结果统计
+            Scrape result statistics
         """
         logger.info("=" * 60)
-        logger.info("开始爬取职位完整描述")
+        logger.info("Starting full description scrape")
 
-        # 查询未爬取的职位
+        # Query unscraped jobs
         pending_jobs = (
             self.db.query(Job)
             .filter(Job.is_scraped.is_(False), Job.redirect_url.isnot(None))
@@ -345,23 +347,23 @@ class DescriptionScrapeService:
             .all()
         )
 
-        logger.info(f"找到 {len(pending_jobs)} 个待爬取职位")
+        logger.info(f"Found {len(pending_jobs)} pending jobs")
 
         if not pending_jobs:
             return {"status": "no_pending", "scraped": 0, "success": 0, "failed": 0}
 
-        # 统计
+        # Statistics
         scraped = 0
         success = 0
         failed = 0
 
         for job in pending_jobs:
-            # 检查速率限制
+            # Check rate limit
             if not self.rate_limiter.wait_if_needed():
-                logger.warning("达到每日限制，停止爬取")
+                logger.warning("Daily limit reached, stopping scrape")
                 break
 
-            # 爬取
+            # Scrape
             result = self._scrape_job(job)
             scraped += 1
 
@@ -370,35 +372,37 @@ class DescriptionScrapeService:
             else:
                 failed += 1
 
-            # 记录请求
+            # Record request
             self.rate_limiter.record_request()
 
-            # 进度日志
+            # Progress log
             if scraped % 10 == 0:
-                logger.info(f"进度: {scraped}/{len(pending_jobs)}, 成功: {success}, 失败: {failed}")
+                logger.info(
+                    f"Progress: {scraped}/{len(pending_jobs)}, success: {success}, failed: {failed}"
+                )
 
         result = {"status": "completed", "scraped": scraped, "success": success, "failed": failed}
 
         logger.info("=" * 60)
-        logger.info(f"爬取完成: {scraped} 个, 成功 {success}, 失败 {failed}")
+        logger.info(f"Scrape complete: {scraped} total, {success} success, {failed} failed")
 
         return result
 
     def _scrape_job(self, job: Job) -> dict:
-        """爬取单个职位"""
+        """Scrape a single job"""
         log_entry = ScrapeLog(
             scrape_time=datetime.now(timezone.utc), job_id=job.id, url=job.redirect_url
         )
 
         try:
-            # 提取描述
+            # Extract description
             result = DescriptionExtractor.extract(job.redirect_url)
 
             log_entry.status = result["status"]
             log_entry.response_time_ms = result.get("response_time_ms", 0)
             log_entry.error_message = result.get("error", "")
 
-            # 存储完整描述
+            # Store full description
             if result["description"]:
                 full_desc = FullDescription(
                     job_id=job.id,
@@ -409,13 +413,13 @@ class DescriptionScrapeService:
                 )
                 self.db.add(full_desc)
 
-            # 标记已爬取
+            # Mark as scraped
             job.is_scraped = True
 
             self.db.commit()
 
             logger.debug(
-                f"已爬取 job_id={job.id}: {result['status']}, {len(result['description'])} 字符"
+                f"Scraped job_id={job.id}: {result['status']}, {len(result['description'])} chars"
             )
 
             return result
@@ -424,7 +428,7 @@ class DescriptionScrapeService:
             self.db.rollback()
             log_entry.status = "error"
             log_entry.error_message = str(e)
-            logger.error(f"爬取 job_id={job.id} 失败: {e}")
+            logger.error(f"Failed to scrape job_id={job.id}: {e}")
             return {"status": "error", "error": str(e)}
 
         finally:
@@ -432,7 +436,7 @@ class DescriptionScrapeService:
             self.db.commit()
 
     def get_scrape_stats(self) -> dict:
-        """获取爬取统计"""
+        """Get scrape statistics"""
         total_jobs = self.db.query(Job).count()
         scraped_jobs = self.db.query(Job).filter(Job.is_scraped.is_(True)).count()
         pending_jobs = self.db.query(Job).filter(Job.is_scraped.is_(False)).count()
@@ -449,25 +453,25 @@ class DescriptionScrapeService:
         }
 
 
-# ==================== 测试代码 ====================
+# ==================== Test Code ====================
 
 if __name__ == "__main__":
     service = DescriptionScrapeService()
 
-    # 显示统计
-    print("=== 爬取统计 ===")
+    # Display statistics
+    print("=== Scrape Statistics ===")
     stats = service.get_scrape_stats()
-    print(f"总职位数: {stats['total_jobs']}")
-    print(f"已爬取: {stats['scraped_jobs']}")
-    print(f"待爬取: {stats['pending_jobs']}")
-    print(f"今日已爬取: {stats['today_scrapes']}/{stats['daily_limit']}")
+    print(f"Total jobs: {stats['total_jobs']}")
+    print(f"Scraped: {stats['scraped_jobs']}")
+    print(f"Pending: {stats['pending_jobs']}")
+    print(f"Today's scrapes: {stats['today_scrapes']}/{stats['daily_limit']}")
 
-    # 开始爬取
-    print("\n=== 开始爬取 ===")
-    result = service.scrape_pending_jobs(max_jobs=10000)  # 爬取所有待爬取的职位
+    # Start scraping
+    print("\n=== Starting Scrape ===")
+    result = service.scrape_pending_jobs(max_jobs=10000)  # Scrape all pending jobs
 
-    print("\n=== 结果 ===")
-    print(f"状态: {result['status']}")
-    print(f"爬取数: {result['scraped']}")
-    print(f"成功: {result['success']}")
-    print(f"失败: {result['failed']}")
+    print("\n=== Results ===")
+    print(f"Status: {result['status']}")
+    print(f"Scraped: {result['scraped']}")
+    print(f"Success: {result['success']}")
+    print(f"Failed: {result['failed']}")

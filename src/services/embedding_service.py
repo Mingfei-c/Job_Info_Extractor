@@ -362,5 +362,5 @@ class EmbeddingService:
         return {
             "total_jobs": total_jobs,
             "embedded_jobs": embedded_jobs,
-            "pending_jobs": total_jobs - embedded_jobs,
+            "pending_jobs": total_jobs - (embedded_jobs or 0),
         }
